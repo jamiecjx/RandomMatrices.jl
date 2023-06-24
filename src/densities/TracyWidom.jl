@@ -16,9 +16,12 @@ where β = 1, 2, or 4 for the orthogonal, unitary, or symplectic ensembles.
 
 References:
 
-1. doi:10.1016/0370-2693(93)91114-3
-2. doi:10.1007/BF02100489
-3. doi.org/10.1007/BF02099545
+1. Level-spacing distributions and the Airy kernel - Craig A. Tracy & Harold Widom
+    doi:10.1016/0370-2693(93)91114-3, doi:10.1007/BF02100489
+2. On orthogonal and symplectic matrix ensembles - Craig A. Tracy & Harold Widom
+    doi.org/10.1007/BF02099545
+3.  On the Numerical Evaluation of Fredholm Determinants - Folkmar Bornemann
+    doi.org/10.1090/s0025-5718-09-02280-7
 
 Numerical routines adapted from Alan Edelman's course notes for MIT 18.338,
 Random Matrix Theory, 2016.
@@ -82,7 +85,14 @@ function _fredholm_det(kernel::Function, quad::Tuple{Array{T,1},Array{T,1}}) whe
     N = length(nodes)
     sqrt_weights = sqrt.(weights)
     weights_matrix = kron(transpose(sqrt_weights),sqrt_weights)
-    K_matrix = [kernel(ξ,η) for ξ in nodes, η in nodes]
+    K_matrix = zeros(N,N)
+    for i=1:N
+        for j=1:i
+            K_matrix[i,j] = kernel(nodes[i], nodes[j])
+            K_matrix[j,i] = K_matrix[i,j]
+        end
+    end
+
     det(I - weights_matrix .* K_matrix)
 end
 
@@ -105,17 +115,27 @@ _A_kernel(x,y) = airyai((x+y)/2) / 2
 _K1tilde(ξ,η,s) = sqrt(_ϕprime(ξ) * _ϕprime(η)) * _A_kernel(_ϕ(ξ,s), _ϕ(η,s))
 
 """
-Samples the largest eigenvalue of the n × n GUE matrix
+Sample the Tracy-Widom Distribution by taking an eigenvalue of a large n x n matrix.
+
+    The sampling is done by using the tridiagonal model of the GUE matrix.
+
+    # Arguments
+    * `d::TracyWidom` or `Type{TracyWidom}`: an instance of `TracyWidom` or the type itself.
+        Using the type itself will default to β = 2.
+    * `n::Int = 1000`: the size of the matrix
 """
-function rand(d::TracyWidom, n::Int)
-    n > 1 || error("Cannot construct $n × $n matrix")
+function rand(d::TracyWidom, n::Int=1000)
+    n >= 1 || error("Cannot construct $n × $n matrix")
+    # arbitrary beta is allowed here but not sure if correct...
     if n < 100
         k = n
     else #Exploit the fact that the eigenvector is concentrated in the top left corner
 	k = round(Int, n-10*n^(1/3)-1)
     end
-    a=randn(n-k+1)
-    b=[χ(i) for i=(n-1):-1:k]
-    v=eigmax(SymTridiagonal(a, b))
+    # normalisation constants may need checking...
+    a=randn(n-k+1) .* sqrt(2)
+    b=[χ(i * d.β) for i=(n-1):-1:k]
+    v=eigmax(SymTridiagonal(a, b)) / sqrt(d.β * n)
+    n^(2/3) * (v-2)
 end
 rand(d::Type{TracyWidom}, t::Integer) = rand(d(2), t)
